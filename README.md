@@ -525,6 +525,155 @@ try {
 
 ---
 
+### StoreKit: Subscription & Notifications
+
+App Store Server API v1 utilities for subscription verification, transaction lookup, and App Store Server Notifications V2 verification.
+
+#### Environment Variables (StoreKit)
+
+| Variable                 | Required | Description                                                                 |
+| ------------------------ | -------- | --------------------------------------------------------------------------- |
+| `APP_STORE_KIT_KEY_ID`   | Yes*     | Key ID for App Store Server API (StoreKit)                                 |
+| `APP_STORE_ISSUER_ID`    | Yes*     | Issuer ID from App Store Connect                                            |
+| `APP_STORE_BUNDLE_ID`    | Yes*     | Your app's bundle identifier                                                |
+| `APP_STORE_KIT_KEY`      | Yes*     | `.p8` private key content (production) or file path when `APP_IS_LOCAL=true` |
+| `APP_IS_LOCAL`           | No       | Set to `"true"` to read key from file path instead of env var content       |
+| `APPLE_KEY_ID`           | Alt      | Alternative to `APP_STORE_KIT_KEY_ID`                                       |
+| `APPLE_ISSUER_ID`        | Alt      | Alternative to `APP_STORE_ISSUER_ID`                                        |
+| `APPLE_APP_BUNDLE_ID`    | Alt      | Alternative to `APP_STORE_BUNDLE_ID`                                        |
+| `APPLE_PRIVATE_KEY_PATH` | Alt      | Alternative to `APP_STORE_KIT_KEY`                                          |
+
+\* Required for StoreKit features. The package supports both `APP_STORE_*` and `APPLE_*` naming conventions.
+
+#### `AppStoreSubscriptionService`
+
+Verifies subscriptions and fetches transaction status via the App Store Server API v1.
+
+**Constructor options:**
+
+- `storeKitConfig` – Optional. Override env-based config (e.g. for serverless).
+- `productIdToTier` – Optional. Map product IDs to app-specific tiers (e.g. `'pro'`, `'premium'`).
+
+**Methods:**
+
+| Method                     | Returns                    | Throws | Description                                                |
+| -------------------------- | -------------------------- | ------ | ---------------------------------------------------------- |
+| `verifySubscriptionV1(id, isSandbox?)` | `VerifiedSubscriptionResult \| null` | No     | Verifies subscription; returns `null` if not found/error   |
+| `getSubscriptionStatus(transactionId, isSandbox?)` | `AppleSignedTransactionInfoWithIsoDates` | Yes    | Full decoded status with ISO date strings                  |
+| `getSubscriptionStatusRaw(id, isSandbox?)` | `AppleSubscriptionStatusResponse` | Yes    | Raw Apple API response                                     |
+
+```typescript
+import {
+  AppStoreSubscriptionService,
+  decodeSubscriptionStatus,
+} from "apple-api-library"
+
+const service = new AppStoreSubscriptionService({
+  // Optional: custom productId → tier mapping
+  productIdToTier: (productId) => {
+    const map: Record<string, string> = {
+      "com.app.monthly": "pro",
+      "com.app.yearly": "pro",
+    }
+    return map[productId] ?? null
+  },
+  // Optional: inject config instead of using env vars
+  // storeKitConfig: { keyId, issuerId, bundleId, privateKey },
+})
+
+// Verify subscription by original transaction ID (returns null on error)
+const result = await service.verifySubscriptionV1(1234567890, false)
+if (result) {
+  console.log(result.status, result.tier, result.expiresAt)
+}
+
+// Get full subscription status (decoded, with ISO dates) – throws on error
+const status = await service.getSubscriptionStatus("1234567890", false)
+
+// Get raw Apple API response – throws on error
+const raw = await service.getSubscriptionStatusRaw(1234567890, false)
+```
+
+#### `AppStoreNotificationVerifier`
+
+Verifies and decodes App Store Server Notifications V2 (JWT signed by Apple). Supports both `kid` (JWK lookup) and `x5c` (certificate chain) in the JWT header.
+
+```typescript
+import { AppStoreNotificationVerifier } from "apple-api-library"
+
+const verifier = new AppStoreNotificationVerifier()
+
+// In your webhook handler: POST /webhooks/apple/subscription-notifications
+// Extract JWT from body (Apple may send { signedPayload: "..." } or the raw JWT string)
+const jwtToken = req.body?.signedPayload ?? req.body
+const decoded = await verifier.verifyAndDecodeNotification(jwtToken)
+if (decoded) {
+  if (decoded.notificationType === "TEST") {
+    // Handle test notification
+    return
+  }
+  const transactionInfo = await verifier.decodeSignedData(
+    decoded.data.signedTransactionInfo!,
+    "transaction"
+  )
+  const renewalInfo = decoded.data.signedRenewalInfo
+    ? await verifier.decodeSignedData(
+        decoded.data.signedRenewalInfo,
+        "renewal"
+      )
+    : null
+  // Handle SUBSCRIBED, DID_RENEW, DID_FAIL_TO_RENEW, EXPIRED, REFUND, REVOKE,
+  // DID_CHANGE_RENEWAL_STATUS, OFFER_REDEEMED, etc. (see AppStoreNotificationType)
+}
+```
+
+#### `generateStoreKitToken` & `getStoreKitConfigFromEnv`
+
+Low-level token generation when you need full control:
+
+```typescript
+import {
+  generateStoreKitToken,
+  getStoreKitConfigFromEnv,
+  sendTestNotification,
+  getAppStoreApiBaseUrl,
+  APPLE_STATUS_CODES,
+} from "apple-api-library"
+
+const token = generateStoreKitToken() // Uses env vars
+// Or with explicit config:
+const token = generateStoreKitToken({
+  keyId: "...",
+  issuerId: "...",
+  bundleId: "com.app",
+  privateKey: "-----BEGIN PRIVATE KEY...",
+})
+
+// Returns { testNotificationToken } – use with Get Test Notification Status to verify delivery
+await sendTestNotification({ sandbox: true })
+const baseUrl = getAppStoreApiBaseUrl(false)
+const decoded = decodeSubscriptionStatus(APPLE_STATUS_CODES.ACTIVE)
+```
+
+#### Constants
+
+| Constant                     | Description                                      |
+| ---------------------------- | ------------------------------------------------ |
+| `APP_STORE_API_PRODUCTION`   | Production inApps v1 base URL                    |
+| `APP_STORE_API_SANDBOX`      | Sandbox inApps v1 base URL                       |
+| `STOREKIT_PRODUCTION_BASE`   | Production StoreKit root URL                     |
+| `STOREKIT_SANDBOX_BASE`      | Sandbox StoreKit root URL                        |
+| `APPLE_PUBLIC_KEYS_URL`      | Production public keys for JWT verification      |
+| `APPLE_SANDBOX_PUBLIC_KEYS_URL` | Sandbox public keys for JWT verification     |
+| `APP_STORE_CONNECT_API`      | App Store Connect API base URL                   |
+| `APPLE_STATUS_CODES`         | Status code constants: `ACTIVE` (1), `EXPIRED` (2), `BILLING_RETRY` (3), `BILLING_GRACE` (4), `REVOKED` (5) |
+
+#### `decodeSubscriptionStatus(statusCode: number)`
+
+Maps Apple's numeric status (1–5) to `{ status, isActive, description }`. Use with `APPLE_STATUS_CODES` for type-safe checks.
+
+---
+
 ## Usage Examples
 
 ### Example 1: Managing Beta Testers
