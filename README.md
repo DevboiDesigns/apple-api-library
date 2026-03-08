@@ -896,6 +896,20 @@ async function safeAddTester() {
 2. Implement retry logic with exponential backoff
 3. Reduce request frequency if hitting rate limits
 
+### Issue: "StoreKit config incomplete" or StoreKit token generation fails
+
+**Possible Causes:**
+
+- StoreKit env vars not set (`APP_STORE_KIT_KEY_ID`, `APP_STORE_ISSUER_ID`, `APP_STORE_BUNDLE_ID`, `APP_STORE_KIT_KEY`)
+- Using `APPLE_*` vars but one is missing
+- `APP_IS_LOCAL=true` with invalid file path for private key
+
+**Solutions:**
+
+1. Set all four StoreKit vars (or `APPLE_*` equivalents)
+2. For production: use key content in env var, not file path
+3. For local: set `APP_IS_LOCAL=true` and use absolute path to `.p8` file
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -910,4 +924,5 @@ ISC
 
 - [Apple App Store Connect API Documentation](https://developer.apple.com/documentation/appstoreconnectapi)
 - [App Store Connect API Keys Guide](https://developer.apple.com/documentation/appstoreconnectapi/managing_your_keys_for_app_store_connect_api)
-- [StoreKit 2 API Documentation](https://developer.apple.com/documentation/appstoreserverapi)
+- [App Store Server API Documentation](https://developer.apple.com/documentation/appstoreserverapi)
+- [App Store Server Notifications V2](https://developer.apple.com/documentation/appstoreservernotifications/app-store-server-notifications-v2)
