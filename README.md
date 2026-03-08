@@ -1,6 +1,9 @@
 # Apple App Store Connect & StoreKit API Library
 
-A TypeScript library for interacting with Apple's App Store Connect API and StoreKit API. This package provides utilities for managing beta testers, fetching app information, generating JWT tokens for authentication, and testing API connectivity.
+A TypeScript library for interacting with Apple's App Store Connect API and App Store Server API (StoreKit). This package provides utilities for:
+
+- **App Store Connect**: Beta testers, app information, JWT tokens
+- **App Store Server API (StoreKit)**: Subscription verification, transaction lookup, App Store Server Notifications V2 verification
 
 [![NPM Downloads](https://img.shields.io/npm/v/apple-api-library)](https://www.npmjs.com/package/apple-api-library)
 
@@ -15,6 +18,7 @@ A TypeScript library for interacting with Apple's App Store Connect API and Stor
   - [AppStoreLib](#appstorelib)
   - [AppStoreBetaTesterLib](#appstorebetatesterlib)
   - [TestNotification](#testnotification)
+  - [StoreKit: Subscription & Notifications](#storekit-subscription--notifications)
 - [Usage Examples](#usage-examples)
 - [Environment Variables](#environment-variables)
 - [Error Handling](#error-handling)
@@ -36,15 +40,13 @@ Or using yarn:
 yarn add apple-api-library
 ```
 
-### Peer Dependencies
+### Dependencies
 
-This package requires the following peer dependencies:
-
-- `axios` (^1.9.0) - For making HTTP requests
-- `dotenv` (^16.5.0) - For environment variable management
-- `jsonwebtoken` (^9.0.2) - For JWT token generation
-
-Make sure to install these in your project:
+- **Direct**: `jwk-to-pem` (^2.0.5) – bundled for App Store Server Notifications V2 JWT verification
+- **Peer** (install in your project):
+  - `axios` (^1.9.0) – HTTP requests
+  - `dotenv` (^16.5.0) – environment variable loading
+  - `jsonwebtoken` (^9.0.2) – JWT signing and decoding
 
 ```bash
 npm install axios dotenv jsonwebtoken
@@ -62,11 +64,11 @@ Before using this library, you need:
    - Create a new key and download the `.p8` private key file
    - Note the Key ID and Issuer ID
 
-3. **StoreKit API Key** (optional) - If you plan to use StoreKit features:
+3. **App Store Server API Key** (required for StoreKit features) - If you plan to use subscription verification or notifications:
 
-   - Generate a separate API key for StoreKit
-   - Download the `.p8` private key file
-   - Note the Key ID
+   - Generate an API key in App Store Connect (Users and Access → Keys → App Store Connect API)
+   - Download the `.p8` private key file (available only once)
+   - Note the Key ID (same issuer ID as Connect; you can use one key for both Connect and StoreKit)
 
 4. **App Information**:
    - Your app's Bundle ID
@@ -98,16 +100,27 @@ APP_IS_LOCAL=true  # Set to "true" if running locally (reads key from file path)
 
 ### Environment Variable Details
 
-| Variable                   | Required | Description                                                     |
-| -------------------------- | -------- | --------------------------------------------------------------- |
-| `APP_STORE_ISSUER_ID`      | Yes      | Your Issuer ID from App Store Connect                           |
-| `APP_STORE_BUNDLE_ID`      | Yes      | Your app's bundle identifier (e.g., `com.company.app`)          |
-| `APP_APPLE_ID`             | Yes      | Your app's Apple ID (numeric ID from App Store Connect)         |
-| `APP_STORE_CONNECT_KEY_ID` | Yes      | The Key ID for your App Store Connect API key                   |
-| `APP_STORE_CONNECT_KEY`    | Yes      | Path to your `.p8` private key file OR the key content itself   |
-| `APP_STORE_KIT_KEY_ID`     | No       | The Key ID for your StoreKit API key (if using StoreKit)        |
-| `APP_STORE_KIT_KEY`        | No       | Path to your StoreKit `.p8` private key file OR the key content |
-| `APP_IS_LOCAL`             | No       | Set to `"true"` if running locally (reads key from file path)   |
+| Variable                   | Required | Description                                                          |
+| -------------------------- | -------- | -------------------------------------------------------------------- |
+| `APP_STORE_ISSUER_ID`      | Yes      | Issuer ID from App Store Connect                                     |
+| `APP_STORE_BUNDLE_ID`      | Yes      | Your app's bundle identifier (e.g., `com.company.app`)                |
+| `APP_APPLE_ID`             | Yes      | Your app's Apple ID (numeric ID from App Store Connect)               |
+| `APP_STORE_CONNECT_KEY_ID` | Yes      | Key ID for App Store Connect API                                     |
+| `APP_STORE_CONNECT_KEY`    | Yes      | Path to `.p8` file (local) OR key content (production)                |
+| `APP_STORE_KIT_KEY_ID`     | Yes**    | Key ID for App Store Server API                                      |
+| `APP_STORE_KIT_KEY`        | Yes**    | Path to `.p8` file (local) OR key content (production)               |
+| `APP_IS_LOCAL`             | No       | Set to `"true"` to read keys from file paths instead of env content  |
+
+\*\* Required only when using StoreKit features (subscription verification, notifications).
+
+### Security: No Hardcoded Credentials
+
+**This package never stores or hardcodes credentials.** All sensitive values (private keys, issuer IDs, key IDs) are loaded from:
+
+1. **Environment variables** – Set in your deployment (Cloud Run, Vercel, etc.)
+2. **Optional config injection** – Pass `StoreKitConfig` or `storeKitConfig` at runtime for serverless/edge use cases
+
+Use your platform's secret manager (e.g. Google Secret Manager, AWS Secrets Manager) and inject values as env vars. Never commit `.p8` files or keys to version control.
 
 ### Key File Setup
 
