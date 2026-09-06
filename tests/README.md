@@ -37,21 +37,48 @@ These tests use mocks and don't require actual API credentials:
    - Tests StoreKit notification sending
    - Tests error handling for various scenarios
 
+5. **storekit.token.test.ts**
+   - Tests for `generateStoreKitToken` utility
+   - Tests token generation with explicit config and env config
+   - Tests payload structure, expiration, and error handling
+
+6. **storekit.config.test.ts**
+   - Tests for `getStoreKitConfigFromEnv`
+   - Tests APP_STORE_* and APPLE_* env var resolution
+   - Tests local file key reading and error cases
+
+7. **storekit.utils.test.ts**
+   - Tests for `getAppStoreApiBaseUrl`, `decodeSubscriptionStatus`, `sendTestNotification`
+   - Tests `APPLE_STATUS_CODES` constants
+   - Tests production vs sandbox URLs and API error handling
+
+8. **subscription.service.test.ts**
+   - Tests for `AppStoreSubscriptionService`
+   - Tests `verifySubscriptionV1` (active, expired, trial, productIdToTier)
+   - Tests `getSubscriptionStatusRaw` and `getSubscriptionStatus`
+   - Tests error handling and sandbox mode
+
+9. **notification.verifier.test.ts**
+   - Tests for `AppStoreNotificationVerifier`
+   - Tests `verifyAndDecodeNotification` (kid and x5c verification)
+   - Tests `decodeSignedData` for transaction and renewal info
+   - Tests public key caching and `clearKeysCache`
+
 ### Integration Tests
 
-5. **integration.test.ts**
+10. **integration.test.ts**
    - Full integration tests that make real API calls
    - Requires actual Apple App Store Connect API credentials
    - Tests end-to-end functionality
    - **Note:** These tests are skipped by default (`.skip`)
    - To run: Remove `.skip` and ensure all environment variables are set
 
-6. **app.store.test.ts** (Legacy)
+11. **app.store.test.ts** (Legacy)
    - Legacy integration test file
    - Kept for backward compatibility
    - Skipped by default
 
-7. **app.store.token.test.ts** (Legacy)
+12. **app.store.token.test.ts** (Legacy)
    - Basic integration tests for token generation
    - Requires actual environment variables
    - Simpler than the comprehensive unit test version

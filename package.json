@@ -1,7 +1,7 @@
 {
   "name": "apple-api-library",
-  "version": "1.0.6",
-  "description": "A TypeScript library for interacting with Apple's App Store Connect API and StoreKit API.",
+  "version": "2.0.0-beta.1",
+  "description": "A TypeScript library for Apple App Store Connect API and App Store Server API (StoreKit): beta testers, subscription verification, and App Store Server Notifications V2.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsup",
     "test": "jest",
-    "release": "npm run build && sudo npm publish"
+    "release": "npm run build && npm publish",
+    "release:beta": "npm run build && npm publish --tag beta"
   },
   "author": "Christopher Hicks",
   "license": "ISC",
@@ -28,6 +29,9 @@
     "tsup": "^8.3.0",
     "typescript": "^5.6.2"
   },
+  "dependencies": {
+    "jwk-to-pem": "^2.0.5"
+  },
   "peerDependencies": {
     "axios": "^1.9.0",
     "dotenv": "^16.5.0",
@@ -37,6 +41,10 @@
     "apple",
     "app store connect",
     "storekit",
+    "app store server api",
+    "subscription",
+    "in-app purchase",
+    "notifications",
     "api",
     "library",
     "typescript"
