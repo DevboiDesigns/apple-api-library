@@ -109,6 +109,8 @@ export class AppStoreBetaTesterLib {
     lastName?: string
   ) => {
     let testerId: string | null = null
+    let operationComplete = false
+
     try {
       // 1. Create the tester if they don't exist
       // Note: Apple requires either betaGroups or builds relationship when creating a tester
@@ -137,7 +139,7 @@ export class AppStoreBetaTesterLib {
         `Created tester with id: ${testerId} for email: ${email} and added to group ${betaGroupId}`
       )
       // If tester was created with the relationship, they're already in the group
-      return
+      operationComplete = true
     } catch (err: any) {
       // Check if this is a "relationship required" error vs "tester already exists"
       const errorData = err.response?.data
@@ -265,107 +267,114 @@ export class AppStoreBetaTesterLib {
     if (!testerId) throw new Error("Tester not found or could not be created")
 
     // 2. Check if tester is already in the group to avoid unnecessary API calls
-    try {
-      const currentTesters = await this.getBetaTestersInGroup(betaGroupId)
-      const alreadyInGroup = currentTesters.some((t: any) => t.id === testerId)
-      if (alreadyInGroup) {
-        console.log(
-          `Tester ${testerId} (${email}) is already in group ${betaGroupId}. Skipping add.`
+    if (!operationComplete) {
+      try {
+        const currentTesters = await this.getBetaTestersInGroup(betaGroupId)
+        const alreadyInGroup = currentTesters.some(
+          (t: any) => t.id === testerId
         )
-        return // Success - tester is already in the group
+        if (alreadyInGroup) {
+          console.log(
+            `Tester ${testerId} (${email}) is already in group ${betaGroupId}. Skipping add.`
+          )
+          operationComplete = true
+        }
+      } catch (checkErr: any) {
+        // If we can't check, proceed with adding anyway
+        console.log(
+          `Could not verify if tester is in group, proceeding with add:`,
+          checkErr.message
+        )
       }
-    } catch (checkErr: any) {
-      // If we can't check, proceed with adding anyway
-      console.log(
-        `Could not verify if tester is in group, proceeding with add:`,
-        checkErr.message
-      )
     }
 
     // 3. Add tester to group using the documented endpoint
-    const url = `https://api.appstoreconnect.apple.com/v1/betaGroups/${betaGroupId}/relationships/betaTesters`
-    try {
-      await axios.post(
-        url,
-        {
-          data: [{ type: "betaTesters", id: testerId }],
-        },
-        { headers: { Authorization: `Bearer ${this.token}` } }
-      )
-      console.log(
-        `Successfully added tester ${testerId} (${email}) to group ${betaGroupId}`
-      )
-    } catch (err: any) {
-      // Handle different error scenarios
-      if (err.response) {
-        const status = err.response.status
-        const errorData = err.response.data
+    if (!operationComplete) {
+      const url = `https://api.appstoreconnect.apple.com/v1/betaGroups/${betaGroupId}/relationships/betaTesters`
+      try {
+        await axios.post(
+          url,
+          {
+            data: [{ type: "betaTesters", id: testerId }],
+          },
+          { headers: { Authorization: `Bearer ${this.token}` } }
+        )
+        console.log(
+          `Successfully added tester ${testerId} (${email}) to group ${betaGroupId}`
+        )
+        operationComplete = true
+      } catch (err: any) {
+        // Handle different error scenarios
+        if (err.response) {
+          const status = err.response.status
+          const errorData = err.response.data
 
-        // 409 Conflict - tester might already be in group (race condition)
-        if (status === 409) {
-          // Double-check if tester is now in the group
-          try {
-            const currentTesters = await this.getBetaTestersInGroup(betaGroupId)
-            const nowInGroup = currentTesters.some(
-              (t: any) => t.id === testerId
-            )
-            if (nowInGroup) {
-              console.log(
-                `Tester ${testerId} (${email}) is now in group ${betaGroupId} (race condition resolved).`
+          // 409 Conflict - tester might already be in group (race condition)
+          if (status === 409) {
+            // Double-check if tester is now in the group
+            try {
+              const currentTesters = await this.getBetaTestersInGroup(
+                betaGroupId
               )
-              return // Success - tester is in the group
+              const nowInGroup = currentTesters.some(
+                (t: any) => t.id === testerId
+              )
+              if (nowInGroup) {
+                console.log(
+                  `Tester ${testerId} (${email}) is now in group ${betaGroupId} (race condition resolved).`
+                )
+                operationComplete = true
+              }
+            } catch (checkErr) {
+              // Ignore check errors
             }
-          } catch (checkErr) {
-            // Ignore check errors
+
+            // If still not in group, log the error details
+            if (!operationComplete) {
+              console.error(
+                `409 Conflict when adding tester to group. Error details:`,
+                JSON.stringify(errorData, null, 2)
+              )
+              throw new Error(
+                `Failed to add tester ${email} to group: Conflict (409). The tester may already be in the group or there may be a permissions issue. Error: ${JSON.stringify(
+                  errorData
+                )}`
+              )
+            }
+          } else if (status === 404) {
+            // 404 Not Found - group or tester doesn't exist
+            throw new Error(
+              `Failed to add tester ${email} to group: Group (${betaGroupId}) or tester (${testerId}) not found (404).`
+            )
+          } else if (status === 403) {
+            // 403 Forbidden - permissions issue
+            throw new Error(
+              `Failed to add tester ${email} to group: Permission denied (403). Check your API key permissions.`
+            )
+          } else {
+            // Other errors
+            console.error(
+              `Error adding tester to group (${status}):`,
+              JSON.stringify(errorData, null, 2)
+            )
+            throw new Error(
+              `Failed to add tester ${email} to group: ${status} ${
+                errorData?.errors?.[0]?.detail ||
+                errorData?.errors?.[0]?.title ||
+                "Unknown error"
+              }`
+            )
           }
-
-          // If still not in group, log the error details
-          console.error(
-            `409 Conflict when adding tester to group. Error details:`,
-            JSON.stringify(errorData, null, 2)
-          )
+        } else {
+          // Network or other errors
+          console.error("Error adding tester to group:", err.message || err)
           throw new Error(
-            `Failed to add tester ${email} to group: Conflict (409). The tester may already be in the group or there may be a permissions issue. Error: ${JSON.stringify(
-              errorData
-            )}`
+            `Failed to add tester ${email} to group: ${
+              err.message || "Unknown error"
+            }`
           )
         }
-
-        // 404 Not Found - group or tester doesn't exist
-        if (status === 404) {
-          throw new Error(
-            `Failed to add tester ${email} to group: Group (${betaGroupId}) or tester (${testerId}) not found (404).`
-          )
-        }
-
-        // 403 Forbidden - permissions issue
-        if (status === 403) {
-          throw new Error(
-            `Failed to add tester ${email} to group: Permission denied (403). Check your API key permissions.`
-          )
-        }
-
-        // Other errors
-        console.error(
-          `Error adding tester to group (${status}):`,
-          JSON.stringify(errorData, null, 2)
-        )
-        throw new Error(
-          `Failed to add tester ${email} to group: ${status} ${
-            errorData?.errors?.[0]?.detail ||
-            errorData?.errors?.[0]?.title ||
-            "Unknown error"
-          }`
-        )
       }
-
-      // Network or other errors
-      console.error("Error adding tester to group:", err.message || err)
-      throw new Error(
-        `Failed to add tester ${email} to group: ${
-          err.message || "Unknown error"
-        }`
-      )
     }
   }
 
