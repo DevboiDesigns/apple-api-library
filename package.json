@@ -1,6 +1,6 @@
 {
   "name": "apple-api-library",
-  "version": "2.0.0-beta.1",
+  "version": "2.0.0-beta.2",
   "description": "A TypeScript library for Apple App Store Connect API and App Store Server API (StoreKit): beta testers, subscription verification, and App Store Server Notifications V2.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
